@@ -1,0 +1,365 @@
+# ================================
+# NODE.JS - DOCKER IMAGE CI/CD
+# ================================
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_BRANCH == "main"
+    - when: never
+
+stages:
+  - security
+  - validate
+  - test
+  - build
+  - scan
+  - promote
+  - release
+
+variables:
+  # Project metadata
+  IMAGE_NAME: "node"
+  DOCKERHUB_IMAGE: "zairakai/${IMAGE_NAME}"
+  GITLAB_REGISTRY_IMAGE: "registry.gitlab.com/zairakai/dockers/${IMAGE_NAME}"
+
+  # Security scanning configuration
+  SECRET_DETECTION_EXCLUDED_PATHS: "docs/,tests/"
+
+  CRANE_VERSION: "v0.20.7"
+
+  # Docker image versions
+  ALPINE_IMAGE: "alpine:3.18"
+  HADOLINT_IMAGE: "hadolint/hadolint:v2.12.0-alpine"
+  KANIKO_IMAGE: "gcr.io/kaniko-project/executor:v1.23.2-debug"
+  NODE_IMAGE: "node:22.9.0-alpine"
+  RELEASE_CLI_IMAGE: "registry.gitlab.com/gitlab-org/release-cli:v0.18.0"
+  SHELLCHECK_IMAGE: "koalaman/shellcheck-alpine:v0.10.0"
+
+# ================================
+# SECURITY STAGE
+# ================================
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+secret_detection:
+  stage: security
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ================================
+# VALIDATION STAGE
+# ================================
+validate:dockerfile:
+  stage: validate
+  image: ${HADOLINT_IMAGE}
+  script:
+    - hadolint Dockerfile
+
+validate:markdownlint:
+  stage: validate
+  image: ${NODE_IMAGE}
+  before_script:
+    - npm install -g markdownlint-cli2
+  script:
+    - markdownlint-cli2 '**/*.md'
+
+validate:shellcheck:
+  stage: validate
+  image: ${SHELLCHECK_IMAGE}
+  before_script:
+    - apk add --no-cache bash findutils
+  script:
+    - |
+      set -e
+      FILES="$(find tools scripts -type f -name '*.sh' 2>/dev/null || true)"
+      if [ -z "$FILES" ]; then
+        echo "ℹ️  No shell scripts found, skipping shellcheck"
+        exit 0
+      fi
+      echo "🔍 Shellcheck files:"
+      echo "$FILES"
+      shellcheck --severity=warning $FILES
+
+# ================================
+# TEST STAGE
+# ================================
+test:bats:
+  stage: test
+  image: ${NODE_IMAGE}
+  needs:
+    - validate:dockerfile
+    - validate:markdownlint
+    - validate:shellcheck
+  before_script:
+    - apk add --no-cache bash git coreutils findutils make
+    - git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
+    - /tmp/bats/install.sh /usr/local
+  script:
+    - bats --recursive tests/
+  artifacts:
+    when: on_failure
+    paths:
+      - tests/**/*.log
+    expire_in: 1 day
+
+# ================================
+# BUILD STAGE
+# ================================
+.build-template:
+  stage: build
+  image:
+    name: ${KANIKO_IMAGE}
+    entrypoint: [""]
+  needs:
+    - test:bats
+  before_script:
+    - |
+      mkdir -p /kaniko/.docker
+      echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "${CI_REGISTRY_USER}" "${CI_JOB_TOKEN}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+
+      echo "━━━━━━━━━━━━━━━━"
+      echo "🔧 Authentication configured"
+      echo "━━━━━━━━━━━━━━━━"
+      echo "→ Registry: ${CI_REGISTRY}"
+      echo "→ Project: ${GITLAB_REGISTRY_IMAGE}"
+      echo ""
+  script:
+    - |
+      VERSION="${CI_COMMIT_TAG#v}"
+      MAJOR="${VERSION%%.*}"
+      MINOR="${VERSION%.*}"
+
+      if ! grep -q "AS ${TARGET}" Dockerfile; then
+        echo "❌ ERROR: Dockerfile does not define stage '${TARGET}'"
+        exit 1
+      fi
+
+      echo "━━━━━━━━━━━━━━━━"
+      echo "🐳 Building ${TARGET} stage"
+      echo "━━━━━━━━━━━━━━━━"
+      echo "→ Target: ${TARGET}"
+      echo "→ Version: ${VERSION}${SUFFIX}"
+      echo ""
+
+      /kaniko/executor \
+        --use-new-run \
+        --cleanup \
+        --snapshot-mode=redo \
+        --compressed-caching=false \
+        --cache=true \
+        --cache-repo="${GITLAB_REGISTRY_IMAGE}" \
+        --cache-ttl=720h \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        --build-arg IMAGE_VERSION="${VERSION}${SUFFIX}" \
+        --build-arg GIT_COMMIT="${CI_COMMIT_SHA}" \
+        --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --target "${TARGET}" \
+        --label org.opencontainers.image.version=${VERSION} \
+        --label org.opencontainers.image.revision=${CI_COMMIT_SHA} \
+        --label org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+        --destination "${GITLAB_REGISTRY_IMAGE}:${VERSION}${SUFFIX}" \
+        --destination "${GITLAB_REGISTRY_IMAGE}:${MINOR}${SUFFIX}" \
+        --destination "${GITLAB_REGISTRY_IMAGE}:${MAJOR}${SUFFIX}" \
+        --destination "${GITLAB_REGISTRY_IMAGE}:latest${SUFFIX}"
+
+      echo ""
+      echo "✅ Build complete"
+
+build:prod:
+  extends: .build-template
+  variables:
+    TARGET: prod
+    SUFFIX: ""
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+build:dev:
+  extends: .build-template
+  variables:
+    TARGET: dev
+    SUFFIX: "-dev"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+build:test:
+  extends: .build-template
+  variables:
+    TARGET: test
+    SUFFIX: "-test"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+# ================================
+# SCAN STAGE
+# ================================
+.scan-template:
+  stage: scan
+  image: ${ALPINE_IMAGE}
+  before_script:
+    - apk add --no-cache curl bash jq docker-cli
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+    - echo "${CI_JOB_TOKEN}" | docker login -u "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+  script:
+    - |
+      echo "🔒 Security Scanning (GitLab Registry)"
+      echo "→ Image: ${GITLAB_REGISTRY_IMAGE}:${IMAGE_TAG}"
+      echo ""
+
+      trivy image \
+        --severity CRITICAL,HIGH \
+        --format json \
+        --output trivy-report-${TARGET}.json \
+        "${GITLAB_REGISTRY_IMAGE}:${IMAGE_TAG}"
+
+      echo ""
+
+      CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-report-${TARGET}.json)
+
+      if [ "${CRITICAL}" -gt 0 ]; then
+        echo "❌ CRITICAL vulnerabilities found - BLOCKING PROMOTION"
+        echo ""
+        echo "🔍 Top 10 Critical:"
+        jq -r '.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | "  - \(.VulnerabilityID): \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix")"' trivy-report-${TARGET}.json | head -n 10
+        exit 1
+      fi
+
+      HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-report-${TARGET}.json)
+      if [ "${HIGH}" -gt 10 ]; then
+        echo "⚠️  HIGH vulnerabilities (${HIGH}) exceed threshold (10)"
+        echo "   Proceeding but review recommended"
+      else
+        echo "✅ Security scan passed - ready for promotion"
+      fi
+  artifacts:
+    paths:
+      - trivy-report-*.json
+    reports:
+      container_scanning: trivy-report-${TARGET}.json
+    expire_in: 1 month
+    when: always
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+scan:prod:
+  extends: .scan-template
+  needs:
+    - build:prod
+  variables:
+    TARGET: prod
+    IMAGE_TAG: "latest"
+
+scan:dev:
+  extends: .scan-template
+  needs:
+    - build:dev
+  variables:
+    TARGET: dev
+    IMAGE_TAG: "latest-dev"
+
+scan:test:
+  extends: .scan-template
+  needs:
+    - build:test
+  variables:
+    TARGET: test
+    IMAGE_TAG: "latest-test"
+
+# ================================
+# PROMOTE STAGE
+# ================================
+.promote-template:
+  stage: promote
+  image: ${ALPINE_IMAGE}
+  before_script:
+    - apk add --no-cache ca-certificates curl
+    - |
+      curl -fL \
+      "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" -o /tmp/go-containerregistry.tar.gz
+      tar -xzf /tmp/go-containerregistry.tar.gz -C /tmp
+      mv /tmp/crane /usr/local/bin/crane
+      chmod +x /usr/local/bin/crane
+      crane version
+    - crane auth login -u "${CI_REGISTRY_USER}" -p "${CI_JOB_TOKEN}" "${CI_REGISTRY}"
+    - crane auth login -u "${DOCKERHUB_USERNAME}" -p "${DOCKERHUB_TOKEN}" index.docker.io
+  script:
+    - |
+      VERSION="${CI_COMMIT_TAG#v}"
+      MAJOR="${VERSION%%.*}"
+      MINOR="${VERSION%.*}"
+
+      echo "→ Promoting ${TARGET} images..."
+      echo ""
+
+      for TAG in "${VERSION}${SUFFIX}" "${MINOR}${SUFFIX}" "${MAJOR}${SUFFIX}" "latest${SUFFIX}"; do
+        SRC="${GITLAB_REGISTRY_IMAGE}:latest${SUFFIX}"
+        DST="${DOCKERHUB_IMAGE}:${TAG}"
+
+        echo "  ${SRC} → ${DST}"
+        crane copy "${SRC}" "${DST}"
+      done
+
+      echo ""
+      echo "✅ Promotion complete"
+      echo "   Images available at: https://hub.docker.com/r/${DOCKERHUB_IMAGE}/tags"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+
+promote:prod:
+  extends: .promote-template
+  needs:
+    - scan:prod
+  variables:
+    TARGET: prod
+    SUFFIX: ""
+
+promote:dev:
+  extends: .promote-template
+  needs:
+    - scan:dev
+  variables:
+    TARGET: dev
+    SUFFIX: "-dev"
+
+promote:test:
+  extends: .promote-template
+  needs:
+    - scan:test
+  variables:
+    TARGET: test
+    SUFFIX: "-test"
+
+# ================================
+# GITLAB RELEASE
+# ================================
+release:create-gitlab-release:
+  stage: release
+  image: ${RELEASE_CLI_IMAGE}
+  needs:
+    - promote:prod
+    - promote:dev
+    - promote:test
+  before_script:
+    - apk add --no-cache git bash
+  script:
+    - |
+      echo "🚀 Creating GitLab Release"
+      VERSION="${CI_COMMIT_TAG#v}"
+      echo "Tag     : ${CI_COMMIT_TAG}"
+      echo "Version : ${VERSION}"
+      echo ""
+      release-cli create \
+        --tag-name "${CI_COMMIT_TAG}" \
+        --name "Release ${CI_COMMIT_TAG}" \
+        --description "Node.js 22 Docker image — zairakai/node:${VERSION}" \
+        --assets-link "{\"name\":\"Docker Hub - Test Image\",\"url\":\"https://hub.docker.com/r/zairakai/node/tags?name=${VERSION}-test\"}" \
+        --assets-link "{\"name\":\"Docker Hub - Dev Image\",\"url\":\"https://hub.docker.com/r/zairakai/node/tags?name=${VERSION}-dev\"}" \
+        --assets-link "{\"name\":\"Docker Hub - Production Image\",\"url\":\"https://hub.docker.com/r/zairakai/node/tags?name=${VERSION}\"}"
+      echo ""
+      echo "✅ GitLab Release created"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/

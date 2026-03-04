@@ -1,0 +1,4 @@
+[submodule "tools/zairakai"]
+	path = tools/zairakai
+	url = https://gitlab.com/zairakai/dockers/tooling.git
+	branch = main

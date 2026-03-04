@@ -1,0 +1,79 @@
+{
+  "name": "node-testing-config",
+  "version": "1.0.0",
+  "description": "Testing Node.js configuration",
+  "environment": "test",
+  "node": {
+    "version": "22",
+    "options": {
+      "max-old-space-size": 2048,
+      "use-strict": true,
+      "expose-gc": true
+    },
+    "flags": [
+      "--enable-source-maps",
+      "--stack-trace-limit=1000",
+      "--trace-warnings",
+      "--unhandled-rejections=strict",
+      "--experimental-vm-modules"
+    ]
+  },
+  "performance": {
+    "memory": {
+      "heap_size_limit": "2048MB",
+      "max_old_generation_size": "1600MB"
+    },
+    "cpu": {
+      "max_workers": 8,
+      "worker_threads": true
+    }
+  },
+  "testing": {
+    "frameworks": {
+      "vitest": {
+        "enabled": true,
+        "coverage": true,
+        "parallel": true
+      }
+    },
+    "coverage": {
+      "enabled": true,
+      "threshold": {
+        "lines": 70,
+        "functions": 70,
+        "branches": 70,
+        "statements": 70
+      },
+      "formats": ["html", "lcov", "text", "json"],
+      "directory": "coverage"
+    },
+    "reporting": {
+      "formats": ["json", "junit"],
+      "directory": "test-results"
+    },
+    "timeouts": {
+      "unit": 30000,
+      "integration": 60000
+    }
+  },
+  "security": {
+    "tls": {
+      "min_version": "TLSv1.2",
+      "max_version": "TLSv1.3",
+      "reject_unauthorized": false
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "timestamp": true
+  },
+  "monitoring": {
+    "health_check": {
+      "enabled": true,
+      "interval": 30000,
+      "timeout": 20000,
+      "path": "/health"
+    }
+  }
+}

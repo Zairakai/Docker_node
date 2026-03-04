@@ -1,0 +1,67 @@
+{
+  "name": "node-development-config",
+  "version": "1.0.0",
+  "description": "Development Node.js configuration",
+  "environment": "development",
+  "node": {
+    "version": "22",
+    "options": {
+      "max-old-space-size": 1024,
+      "use-strict": true,
+      "inspect": "0.0.0.0:9229"
+    },
+    "flags": [
+      "--enable-source-maps",
+      "--stack-trace-limit=100",
+      "--trace-warnings",
+      "--trace-deprecation",
+      "--unhandled-rejections=strict"
+    ]
+  },
+  "performance": {
+    "memory": {
+      "heap_size_limit": "1024MB",
+      "max_old_generation_size": "800MB"
+    },
+    "cpu": {
+      "max_workers": 4,
+      "worker_threads": true
+    }
+  },
+  "development": {
+    "hot_reload": {
+      "enabled": true,
+      "watch_options": {
+        "ignored": ["node_modules", ".git", "dist", "build"],
+        "use_polling": true,
+        "poll_interval": 1000
+      }
+    },
+    "debugging": {
+      "enabled": true,
+      "inspect_port": 9229,
+      "inspect_host": "0.0.0.0",
+      "source_maps": true
+    }
+  },
+  "security": {
+    "tls": {
+      "min_version": "TLSv1.2",
+      "max_version": "TLSv1.3",
+      "reject_unauthorized": false
+    }
+  },
+  "logging": {
+    "level": "debug",
+    "format": "pretty",
+    "timestamp": true
+  },
+  "monitoring": {
+    "health_check": {
+      "enabled": true,
+      "interval": 30000,
+      "timeout": 15000,
+      "path": "/health"
+    }
+  }
+}
