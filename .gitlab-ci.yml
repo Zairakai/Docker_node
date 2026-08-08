@@ -4,6 +4,7 @@
 
 workflow:
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_MERGE_REQUEST_ID
     - if: $CI_COMMIT_BRANCH == "main"
@@ -17,6 +18,11 @@ stages:
   - scan
   - promote
   - release
+  # Scheduled-only stages, used by the jobs conditionally included from
+  # .gitlab-ci-scheduled.yml (CI_PIPELINE_SOURCE == schedule). GitLab does
+  # not merge stage lists across includes, so they must be declared here.
+  - security-audit
+  - version-check
 
 variables:
   # Project metadata
@@ -42,6 +48,12 @@ variables:
 # ================================
 include:
   - template: Security/Secret-Detection.gitlab-ci.yml
+  # Scheduled-only jobs (Trivy audit of published images, version check
+  # against upstream). Kept in a separate file since these run against a
+  # cron schedule, not the normal push/MR/tag pipeline below.
+  - local: .gitlab-ci-scheduled.yml
+    rules:
+      - if: $CI_PIPELINE_SOURCE == "schedule"
 
 secret_detection:
   stage: security
