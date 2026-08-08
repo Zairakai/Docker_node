@@ -41,6 +41,10 @@ RUN apk add --no-cache \
     dumb-init \
   && mkdir -p /app /tmp/.npm \
   && chown -R node:node /app /tmp/.npm \
+  # Self-update npm ahead of the next official base image rebuild — the
+  # bundled npm on this base image ships a tar version with a known
+  # critical CVE, fixed in the npm release below.
+  && npm install -g npm@latest \
   && npm cache clean --force \
   && rm -rf /var/cache/apk/*
 
