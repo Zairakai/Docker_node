@@ -1,4 +1,4 @@
-# Zairakai Node.js 22 Docker Image
+# Zairakai Node.js 24 Docker Image
 
 [![Main][pipeline-main-badge]][pipeline-main-link]
 [![Security][security-badge]][security]
@@ -12,15 +12,15 @@
 [![Dev Image Size][docker-dev-size-badge]][dockerhub]
 [![Test Image Size][docker-test-size-badge]][dockerhub]
 
-Lightweight, secure, and optimized Node.js 22 LTS images built on Alpine Linux.
+Lightweight, secure, and optimized Node.js 24 LTS images built on Alpine Linux.
 
-Production-ready Node.js 22 images with multi-stage builds for production, development, and testing.
+Production-ready Node.js 24 images with multi-stage builds for production, development, and testing.
 
 ## Features
 
 ### Production Stage (`prod`)
 
-- Node.js 22 LTS on Alpine Linux
+- Node.js 24 LTS on Alpine Linux
 - Minimal runtime, non-root user (`node:node`)
 - Hardened npm config for production
 - Health check and graceful shutdown entrypoint
@@ -51,7 +51,7 @@ docker run -d --name node-app -p 3000:3000 zairakai/node:latest node server.js
 
 | Version | Production | Development | Test |
 | --- | --- | --- | --- |
-| **Major** | `zairakai/node:22-prod` | `zairakai/node:22-dev` | `zairakai/node:22-test` |
+| **Major** | `zairakai/node:24-prod` | `zairakai/node:24-dev` | `zairakai/node:24-test` |
 | **Latest** | `zairakai/node:latest` | `zairakai/node:latest-dev` | `zairakai/node:latest-test` |
 
 ## Usage
@@ -90,7 +90,7 @@ services:
 ```yaml
 services:
   frontend:
-    image: zairakai/node:22-dev
+    image: zairakai/node:24-dev
     working_dir: /app
     volumes:
       - ./frontend:/app
@@ -214,7 +214,7 @@ See [SECURITY.md](SECURITY.md) for the security policy.
 [pipeline-main-link]: https://gitlab.com/zairakai/dockers/node/-/commits/main
 [license-badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [license]: ./LICENSE
-[node-badge]: https://img.shields.io/badge/node-22-blue.svg
+[node-badge]: https://img.shields.io/badge/node-24-blue.svg
 [node]: https://nodejs.org/
 [release-badge]: https://img.shields.io/gitlab/v/release/zairakai%2Fdockers%2Fnode?logo=gitlab
 [release]: https://gitlab.com/zairakai/dockers/node/-/releases

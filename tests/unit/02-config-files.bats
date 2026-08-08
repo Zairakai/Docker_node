@@ -102,8 +102,8 @@ load "../helpers/common"
   [ "$status" -eq 0 ]
 }
 
-@test "Dockerfile uses Node 22" {
-  run grep -q "NODE_VERSION=22" "${PROJECT_ROOT}/Dockerfile"
+@test "Dockerfile uses Node 24" {
+  run grep -q "NODE_VERSION=24" "${PROJECT_ROOT}/Dockerfile"
   [ "$status" -eq 0 ]
 }
 
