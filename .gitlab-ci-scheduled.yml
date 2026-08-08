@@ -1,0 +1,178 @@
+# ================================
+# SCHEDULED SECURITY SCAN
+# ================================
+# Pipeline déclenché par un schedule pour scanner les images latest
+# Configure dans: CI/CD > Schedules > New schedule
+# Recommended: Daily at 2 AM
+
+stages:
+  - security-audit
+  - version-check
+
+variables:
+  DOCKERHUB_IMAGE: "zairakai/node"
+  ALPINE_IMAGE: "alpine:latest"
+
+.scan-latest-template:
+  stage: security-audit
+  image: ${ALPINE_IMAGE}
+  before_script:
+    - apk add --no-cache curl bash jq
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+  script:
+    - |
+      echo "━━━━━━━━━━━━━━━━"
+      echo "🔒 Scheduled Security Audit: ${IMAGE_TAG}"
+      echo "━━━━━━━━━━━━━━━━"
+      echo ""
+
+      # Scan avec rapport détaillé
+      trivy image \
+        --severity CRITICAL,HIGH,MEDIUM \
+        --format json \
+        --output trivy-audit-${TARGET}.json \
+        "${DOCKERHUB_IMAGE}:${IMAGE_TAG}"
+
+      # Rapport humain
+      trivy image \
+        --severity CRITICAL,HIGH \
+        --format table \
+        "${DOCKERHUB_IMAGE}:${IMAGE_TAG}" | tee trivy-summary-${TARGET}.txt
+
+      # Parse les résultats
+      CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-audit-${TARGET}.json)
+      HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-audit-${TARGET}.json)
+      MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-audit-${TARGET}.json)
+
+      echo ""
+      echo "📊 Vulnerability Summary:"
+      echo "   Critical: ${CRITICAL}"
+      echo "   High:     ${HIGH}"
+      echo "   Medium:   ${MEDIUM}"
+      echo ""
+
+      # Génère un rapport Markdown
+      cat > security-report-${TARGET}.md <<EOF
+      # 🔒 Security Audit Report
+
+      **Image**: \`${DOCKERHUB_IMAGE}:${IMAGE_TAG}\`
+      **Scan Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+      **Pipeline**: [#${CI_PIPELINE_ID}](${CI_PIPELINE_URL})
+
+      ## Vulnerability Summary
+
+      | Severity | Count |
+      |----------|-------|
+      | 🔴 Critical | ${CRITICAL} |
+      | 🟠 High | ${HIGH} |
+      | 🟡 Medium | ${MEDIUM} |
+
+      ## Action Required
+
+      EOF
+
+      if [ "${CRITICAL}" -gt 0 ]; then
+        echo "**🚨 CRITICAL vulnerabilities detected - immediate action required**" >> security-report-${TARGET}.md
+        echo "" >> security-report-${TARGET}.md
+        echo "\`\`\`" >> security-report-${TARGET}.md
+        cat trivy-summary-${TARGET}.txt >> security-report-${TARGET}.md
+        echo "\`\`\`" >> security-report-${TARGET}.md
+
+        # Créer une issue GitLab automatiquement (optionnel)
+        # curl --request POST --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        #   "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/issues" \
+        #   --form "title=🔒 Critical vulnerabilities in ${IMAGE_TAG}" \
+        #   --form "description=$(cat security-report-${TARGET}.md)"
+
+      elif [ "${HIGH}" -gt 10 ]; then
+        echo "**⚠️ High number of HIGH vulnerabilities - review recommended**" >> security-report-${TARGET}.md
+      else
+        echo "✅ No critical issues detected" >> security-report-${TARGET}.md
+      fi
+
+      cat security-report-${TARGET}.md
+  artifacts:
+    paths:
+      - trivy-audit-*.json
+      - trivy-summary-*.txt
+      - security-report-*.md
+    expire_in: 3 months
+    when: always
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# Scan des 3 images latest
+audit:latest-prod:
+  extends: .scan-latest-template
+  variables:
+    TARGET: prod
+    IMAGE_TAG: latest
+
+audit:latest-dev:
+  extends: .scan-latest-template
+  variables:
+    TARGET: dev
+    IMAGE_TAG: latest-dev
+
+audit:latest-test:
+  extends: .scan-latest-template
+  variables:
+    TARGET: test
+    IMAGE_TAG: latest-test
+
+# ================================
+# SCHEDULED VERSION CHECK
+# ================================
+# Compares the Node.js base image version pinned in the Dockerfile
+# against the latest upstream LTS release. Report only — no automatic
+# bump. Runs on the same schedule as the security audit above.
+
+version:check:
+  stage: version-check
+  image: ${ALPINE_IMAGE}
+  before_script:
+    - apk add --no-cache curl bash jq
+  script:
+    - |
+      echo "━━━━━━━━━━━━━━━━"
+      echo "📦 Version Check: Node.js base image"
+      echo "━━━━━━━━━━━━━━━━"
+      echo ""
+
+      REPORT="version-check-report.md"
+      : > "${REPORT}"
+      HAS_UPDATE=0
+
+      echo "| Component | Current | Latest | Status |" | tee -a "${REPORT}"
+      echo "|-----------|---------|--------|--------|" | tee -a "${REPORT}"
+
+      report_row() {
+        local label="$1" current="$2" latest="$3"
+        if [ "${current}" = "${latest}" ]; then
+          echo "| ${label} | ${current} | ${latest} | up to date |" | tee -a "${REPORT}"
+        else
+          echo "| ${label} | ${current} | ${latest} | update available |" | tee -a "${REPORT}"
+          HAS_UPDATE=1
+        fi
+      }
+
+      # Node.js major version — compared against the current upstream LTS line.
+      CURRENT_NODE=$(grep -oE 'ARG NODE_VERSION=[0-9]+' Dockerfile | head -n1 | cut -d= -f2)
+      LATEST_LTS=$(curl -sf --max-time 10 "https://nodejs.org/dist/index.json" | jq -r '[.[] | select(.lts != false)][0].version' | sed 's/^v//' | cut -d. -f1)
+      report_row "node (LTS)" "${CURRENT_NODE}" "${LATEST_LTS}"
+
+      echo "" | tee -a "${REPORT}"
+      if [ "${HAS_UPDATE}" -eq 1 ]; then
+        echo "⚠️  Update(s) available — review before bumping manually" | tee -a "${REPORT}"
+      else
+        echo "✅ Everything up to date" | tee -a "${REPORT}"
+      fi
+  artifacts:
+    paths:
+      - version-check-report.md
+    expire_in: 3 months
+    when: always
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
