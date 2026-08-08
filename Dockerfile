@@ -17,7 +17,7 @@ FROM node:${NODE_VERSION}-alpine AS base
 LABEL maintainer="Stanislas Poisson <stanislas.p@the-white-rabbits.com>" \
     org.opencontainers.image.source="https://gitlab.com/zairakai/dockers/node" \
     org.opencontainers.image.licenses="MIT" \
-    org.opencontainers.image.description="Node.js 22 Alpine base image"
+    org.opencontainers.image.description="Node.js 24 Alpine base image"
 
 ARG IMAGE_VERSION
 ARG GIT_COMMIT
@@ -65,7 +65,7 @@ CMD ["node"]
 FROM base AS prod
 
 LABEL stage="prod" \
-    description="Production-ready Node.js 22"
+    description="Production-ready Node.js 24"
 
 ENV BUILD_STAGE=prod
 
@@ -78,7 +78,7 @@ COPY --chown=root:root config/prod/node.prod.json /usr/local/etc/node-config.jso
 FROM base AS dev
 
 LABEL stage="dev" \
-    description="Development Node.js 22 with dev tools"
+    description="Development Node.js 24 with dev tools"
 
 USER root
 
@@ -132,7 +132,7 @@ CMD ["npm", "run", "dev"]
 FROM dev AS test
 
 LABEL stage="test" \
-    description="Test Node.js 22 with vitest and coverage"
+    description="Test Node.js 24 with vitest and coverage"
 
 USER root
 
