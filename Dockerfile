@@ -7,7 +7,7 @@ ARG IMAGE_VERSION=unknown
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
-ARG NODE_VERSION=22
+ARG NODE_VERSION=24
 
 # ================
 # STAGE 0: BASE
