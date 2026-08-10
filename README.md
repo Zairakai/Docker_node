@@ -33,6 +33,7 @@ Production-ready Node.js 24 images with multi-stage builds for production, devel
 - Process manager with `pm2`
 - Build tools: git, make, g++, python3, curl
 - Debug port `9229` exposed
+- `typedoc` - auto-generated API docs from TypeScript source
 
 ### Test Stage (`test`)
 
