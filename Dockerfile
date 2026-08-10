@@ -109,6 +109,7 @@ RUN apk add --no-cache \
     typescript \
     ts-node \
     markdownlint-cli2 \
+    typedoc \
   && mkdir -p /home/node/.cache /home/node/.npm \
   && chown -R node:node /home/node \
   && npm cache clean --force
