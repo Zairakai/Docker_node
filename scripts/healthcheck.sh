@@ -171,11 +171,23 @@ check_configuration() {
   fi
 
   # Check npm configuration
+  # /etc/npmrc is not where this image keeps npm config — npm itself reports
+  # the real path via `config get userconfig`/`globalconfig` (typically
+  # ~/.npmrc for a non-root node user). Ask npm instead of hardcoding a path
+  # that never existed here, which made this check permanently fail despite
+  # npm being correctly configured (see #1).
   increment_check
-  if [ -f "/etc/npmrc" ]; then
-    pass_check "npm configuration file exists"
+  local npmrc_path
+  npmrc_path=$(npm config get userconfig 2>/dev/null || echo "")
+  if [ -n "$npmrc_path" ] && [ -f "$npmrc_path" ]; then
+    pass_check "npm configuration file exists ($npmrc_path)"
   else
-    fail_check "npm configuration file not found"
+    npmrc_path=$(npm config get globalconfig 2>/dev/null || echo "")
+    if [ -n "$npmrc_path" ] && [ -f "$npmrc_path" ]; then
+      pass_check "npm configuration file exists ($npmrc_path)"
+    else
+      fail_check "npm configuration file not found (checked userconfig and globalconfig)"
+    fi
   fi
 
   # Check environment variables
