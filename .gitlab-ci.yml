@@ -33,15 +33,15 @@ variables:
   # Security scanning configuration
   SECRET_DETECTION_EXCLUDED_PATHS: "docs/,tests/"
 
-  CRANE_VERSION: "v0.20.7"
+  CRANE_VERSION: "v0.22.1"
 
   # Docker image versions
-  ALPINE_IMAGE: "alpine:3.18"
-  HADOLINT_IMAGE: "hadolint/hadolint:v2.12.0-alpine"
+  ALPINE_IMAGE: "alpine:3.24"
+  HADOLINT_IMAGE: "hadolint/hadolint:v2.15.1-alpine"
   KANIKO_IMAGE: "gcr.io/kaniko-project/executor:v1.23.2-debug"
-  NODE_IMAGE: "node:24.19.0-alpine"
-  RELEASE_CLI_IMAGE: "registry.gitlab.com/gitlab-org/release-cli:v0.18.0"
-  SHELLCHECK_IMAGE: "koalaman/shellcheck-alpine:v0.10.0"
+  NODE_IMAGE: "node:24.21.0-alpine"
+  RELEASE_CLI_IMAGE: "registry.gitlab.com/gitlab-org/release-cli:v0.24.0"
+  SHELLCHECK_IMAGE: "koalaman/shellcheck-alpine:v0.11.0"
 
 # ================================
 # SECURITY STAGE

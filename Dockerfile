@@ -56,7 +56,7 @@ COPY --chown=root:root scripts/healthcheck.sh /usr/local/bin/healthcheck.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD /usr/local/bin/healthcheck.sh
+    CMD ["/usr/local/bin/healthcheck.sh"]
 
 USER node
 
@@ -125,7 +125,7 @@ USER node
 RUN /usr/local/bin/dev-setup.sh
 
 HEALTHCHECK --interval=30s --timeout=15s --start-period=10s --retries=3 \
-    CMD /usr/local/bin/healthcheck-dev.sh
+    CMD ["/usr/local/bin/healthcheck-dev.sh"]
 
 EXPOSE 9229 24678
 
@@ -161,6 +161,6 @@ RUN chmod +x /usr/local/bin/healthcheck-test.sh
 USER node
 
 HEALTHCHECK --interval=30s --timeout=20s --start-period=15s --retries=3 \
-    CMD /usr/local/bin/healthcheck-test.sh
+    CMD ["/usr/local/bin/healthcheck-test.sh"]
 
 CMD ["npm", "test"]
