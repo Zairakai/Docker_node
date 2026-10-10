@@ -103,6 +103,7 @@ RUN apk add --no-cache \
     g++ \
     vim \
     jq \
+    gnupg \
   && npm install -g \
     nodemon \
     pm2 \
