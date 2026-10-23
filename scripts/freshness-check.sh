@@ -133,6 +133,9 @@ push_signed_tag() {
     git config user.email "${RELEASE_SIGNER_EMAIL}"
     git config user.signingkey "${key}"
     git config gpg.program gpg
+    # The runner reuses its clone: drop a local tag left by an earlier failed run.
+    # The remote was checked by the caller, so this tag does not exist there.
+    git tag -d "${tag}" >/dev/null 2>&1 || true
     git tag -s "${tag}" -m "${message}"
     auth=$(printf 'oauth2:%s' "${FRESHNESS_TOKEN:-${GITLAB_TOKEN:-}}" | base64 | tr -d '\n')
     git -c "http.extraHeader=Authorization: Basic ${auth}" \
