@@ -86,6 +86,21 @@ notify() {
     curl -fsS -m 15 -H "Title: $1" -d "$2" "${NTFY_URL}" >/dev/null || true
 }
 
+# Print who the token is and fail early when it cannot write issues and tags.
+check_token() {
+    local info
+    info=$(curl -sS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${CI_API_V4_URL}/personal_access_tokens/self" || true)
+    if ! jq -e '.scopes' >/dev/null 2>&1 <<<"${info}"; then
+        echo "GITLAB_TOKEN is not a personal access token that the API accepts: ${info:0:120}" >&2
+        return 1
+    fi
+    echo "Token: $(jq -r '.name' <<<"${info}"), scopes: $(jq -r '.scopes | join(",")' <<<"${info}"), expires: $(jq -r '.expires_at // "never"' <<<"${info}")"
+    jq -e '.scopes | index("api")' >/dev/null <<<"${info}" || {
+        echo "GITLAB_TOKEN needs the api scope to create issues and tags." >&2
+        return 1
+    }
+}
+
 # True when the last push pipeline of main passed.
 main_is_green() {
     local status
@@ -135,6 +150,7 @@ main() {
     local upstream="${UPSTREAM_IMAGE:-}"
     [[ -n "${upstream}" ]] || upstream=$(upstream_from_dockerfile Dockerfile)
     API="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}"
+    check_token
 
     local up_cfg pub_cfg up_ver pub_ver up_created pub_created
     up_cfg=$(crane config "${upstream}")
