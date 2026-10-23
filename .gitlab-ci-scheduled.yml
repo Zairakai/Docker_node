@@ -176,3 +176,35 @@ version:check:
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ================================
+# SCHEDULED FRESHNESS CHECK
+# ================================
+# Follows the upstream base image (scripts/freshness-check.sh): alert and issue
+# for every new upstream version, and with AUTO_REBUILD=true a signed patch tag
+# once the cooldown is over. Uses the group variables GITLAB_TOKEN,
+# GPG_PRIVATE_KEY_B64, RELEASE_SIGNER_NAME and RELEASE_SIGNER_EMAIL, and
+# NTFY_URL for the alert.
+
+freshness:check:
+  stage: version-check
+  image: ${ALPINE_IMAGE}
+  needs:
+    - audit:latest-prod
+  variables:
+    VERSION_ENV: "NODE_VERSION"
+    PUBLISHED_IMAGE: "${DOCKERHUB_IMAGE}:latest"
+    AUDIT_JSON: "trivy-audit-prod.json"
+    IMAGE_LABEL: "node"
+    COOLDOWN_DAYS: "3"
+  before_script:
+    - apk add --no-cache bash curl jq git gnupg
+    - |
+      curl -fL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" -o /tmp/go-containerregistry.tar.gz
+      tar -xzf /tmp/go-containerregistry.tar.gz -C /tmp
+      mv /tmp/crane /usr/local/bin/crane
+      chmod +x /usr/local/bin/crane
+  script:
+    - bash scripts/freshness-check.sh
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
