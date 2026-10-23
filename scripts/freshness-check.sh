@@ -19,6 +19,7 @@ set -euo pipefail
 #   AUDIT_JSON      trivy report of the published image
 #   IMAGE_LABEL     short name used in titles (php, node)
 # Optional: COOLDOWN_DAYS (3), AUTO_REBUILD (false), NTFY_URL, ISSUE_ASSIGNEE_ID.
+# Token: FRESHNESS_TOKEN (fine-grained, issues, tags, pipelines), else GITLAB_TOKEN.
 
 # --- Pure helpers (unit tested) ------------------------------------------------
 
@@ -77,28 +78,14 @@ image_env() {
     jq -r --arg k "${key}" '.config.Env[] | select(startswith($k + "=")) | split("=")[1]' <<<"${config}"
 }
 
+# The dedicated fine-grained token, or the group token as a fallback.
 gl() {
-    curl -fsS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "$@"
+    curl -fsS --header "PRIVATE-TOKEN: ${FRESHNESS_TOKEN:-${GITLAB_TOKEN:-}}" "$@"
 }
 
 notify() {
     [[ -n "${NTFY_URL:-}" ]] || return 0
     curl -fsS -m 15 -H "Title: $1" -d "$2" "${NTFY_URL}" >/dev/null || true
-}
-
-# Print who the token is and fail early when it cannot write issues and tags.
-check_token() {
-    local info
-    info=$(curl -sS --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" "${CI_API_V4_URL}/personal_access_tokens/self" || true)
-    if ! jq -e '.scopes' >/dev/null 2>&1 <<<"${info}"; then
-        echo "GITLAB_TOKEN is not a personal access token that the API accepts: ${info:0:120}" >&2
-        return 1
-    fi
-    echo "Token: $(jq -r '.name' <<<"${info}"), scopes: $(jq -r '.scopes | join(",")' <<<"${info}"), expires: $(jq -r '.expires_at // "never"' <<<"${info}")"
-    jq -e '.scopes | index("api")' >/dev/null <<<"${info}" || {
-        echo "GITLAB_TOKEN needs the api scope to create issues and tags." >&2
-        return 1
-    }
 }
 
 # True when the last push pipeline of main passed.
@@ -140,7 +127,7 @@ push_signed_tag() {
     git config user.signingkey "${key}"
     git config gpg.program gpg
     git tag -s "${tag}" -m "${message}"
-    git -c "http.extraHeader=PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+    git -c "http.extraHeader=PRIVATE-TOKEN: ${FRESHNESS_TOKEN:-${GITLAB_TOKEN:-}}" \
         push "${CI_SERVER_URL}/${CI_PROJECT_PATH}.git" "refs/tags/${tag}"
 }
 
@@ -150,7 +137,6 @@ main() {
     local upstream="${UPSTREAM_IMAGE:-}"
     [[ -n "${upstream}" ]] || upstream=$(upstream_from_dockerfile Dockerfile)
     API="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}"
-    check_token
 
     local up_cfg pub_cfg up_ver pub_ver up_created pub_created
     up_cfg=$(crane config "${upstream}")
