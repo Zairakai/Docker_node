@@ -135,7 +135,7 @@ test:bats:
     - validate:markdownlint
     - validate:shellcheck
   before_script:
-    - apk add --no-cache bash git coreutils findutils make
+    - apk add --no-cache bash git coreutils findutils make jq
     - git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
     - /tmp/bats/install.sh /usr/local
   script:

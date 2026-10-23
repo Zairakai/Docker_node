@@ -45,7 +45,8 @@ use_script() {
 
 @test "age_days counts whole days from an ISO date" {
   use_script
-  now=$(date -u -d "2026-10-23T12:00:00Z" +%s)
+  # 2026-10-23T12:00:00Z, a literal because busybox date has no -d
+  now=1792756800
   [[ "$(age_days "2026-10-20T11:00:00.123456789Z" "${now}")" == "3" ]]
   [[ "$(age_days "2026-10-22T13:00:00Z" "${now}")" == "0" ]]
 }
