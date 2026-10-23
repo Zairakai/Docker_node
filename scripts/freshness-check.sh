@@ -34,9 +34,15 @@ next_patch() {
     echo "${version%.*}.$((${version##*.} + 1))"
 }
 
-# ISO 8601 date to epoch seconds (fractional seconds are accepted).
+# ISO 8601 date to epoch seconds (fractional seconds and +hh:mm offsets are accepted).
 iso_to_epoch() {
-    jq -rn --arg d "$1" '$d | sub("\\.[0-9]+"; "") | fromdateiso8601'
+    jq -rn --arg d "$1" '
+        $d | sub("\\.[0-9]+"; "")
+        | if test("[+-][0-9]{2}:[0-9]{2}$") then
+            capture("^(?<t>.*)(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2})$")
+            | ((.t + "Z") | fromdateiso8601)
+              - (if .s == "+" then 1 else -1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60)
+          else fromdateiso8601 end'
 }
 
 # Whole days between an ISO date and now (or the epoch given as $2).
@@ -117,9 +123,10 @@ create_issue() {
         --data "assignee_ids=${ISSUE_ASSIGNEE_ID:-1367462}" | jq -r '.web_url'
 }
 
-# Signed tag on the current commit, pushed with the group token.
+# Signed tag on the current commit, pushed with the token. Git over HTTP wants
+# Basic authentication: a PRIVATE-TOKEN header is not accepted there.
 push_signed_tag() {
-    local tag="$1" message="$2" key
+    local tag="$1" message="$2" key auth
     printf '%s' "${GPG_PRIVATE_KEY_B64}" | base64 -d | gpg --batch --quiet --import
     key=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
     git config user.name "${RELEASE_SIGNER_NAME}"
@@ -127,7 +134,8 @@ push_signed_tag() {
     git config user.signingkey "${key}"
     git config gpg.program gpg
     git tag -s "${tag}" -m "${message}"
-    git -c "http.extraHeader=PRIVATE-TOKEN: ${FRESHNESS_TOKEN:-${GITLAB_TOKEN:-}}" \
+    auth=$(printf 'oauth2:%s' "${FRESHNESS_TOKEN:-${GITLAB_TOKEN:-}}" | base64 | tr -d '\n')
+    git -c "http.extraHeader=Authorization: Basic ${auth}" \
         push "${CI_SERVER_URL}/${CI_PROJECT_PATH}.git" "refs/tags/${tag}"
 }
 

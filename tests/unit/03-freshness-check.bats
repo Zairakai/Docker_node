@@ -51,6 +51,12 @@ use_script() {
   [[ "$(age_days "2026-10-22T13:00:00Z" "${now}")" == "0" ]]
 }
 
+@test "iso_to_epoch accepts a +hh:mm offset like the GitLab API returns" {
+  use_script
+  [[ "$(iso_to_epoch "2026-10-11T12:35:13+02:00")" == "$(iso_to_epoch "2026-10-11T10:35:13Z")" ]]
+  [[ "$(iso_to_epoch "2026-10-11T08:05:00-04:30")" == "$(iso_to_epoch "2026-10-11T12:35:00Z")" ]]
+}
+
 @test "latest_release_tag keeps only x.y.z tags" {
   use_script
   run bash -c "source '${SCRIPT}'; printf '%s\n' v2.2.0 2.2.1 2.3.0 2.10.0 2.3.0-dev latest | latest_release_tag"
