@@ -95,3 +95,10 @@ JSON
   printf 'ARG NODE_VERSION=24\nFROM node:${NODE_VERSION}-alpine AS base\n' > "${dockerfile}"
   [[ "$(upstream_from_dockerfile "${dockerfile}")" == "node:24-alpine" ]]
 }
+
+@test "freshness-check.sh closes the open issues once the image is up to date" {
+  use_script
+  run grep -n "close_resolved" "${SCRIPT}"
+  [[ "$status" -eq 0 ]]
+  [[ "$(declare -F close_resolved)" == "close_resolved" ]]
+}
