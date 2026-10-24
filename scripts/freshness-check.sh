@@ -7,6 +7,7 @@ set -euo pipefail
 # Level 2 (always): one GitLab issue per new upstream version, never duplicated.
 # Level 3 (AUTO_REBUILD=true only): a signed patch tag on main, which starts the
 #   normal tag pipeline (build, scan, promote).
+# The open issues of the check are closed, with a note, once the image is up to date.
 #
 # A new upstream version waits COOLDOWN_DAYS before it is used, so a release
 # that is too fresh cannot break the images. A fixable CRITICAL or HIGH finding
@@ -123,6 +124,23 @@ create_issue() {
         --data "assignee_ids=${ISSUE_ASSIGNEE_ID:-1367462}" | jq -r '.web_url'
 }
 
+# Close the open issues of this check: the published image is up to date, nothing is left to do.
+# A refusal of the token never stops the check.
+close_resolved() {
+    local prefix="Rebuild ${IMAGE_LABEL} image: " iid
+    while read -r iid; do
+        [[ -n "${iid}" ]] || continue
+        gl --request POST --data-urlencode "body=The freshness check (${CI_PIPELINE_URL}) finds the ${IMAGE_LABEL} image up to date: nothing is left to rebuild." \
+            "${API}/issues/${iid}/notes" >/dev/null || true
+        if gl --request PUT --data "state_event=close" "${API}/issues/${iid}" >/dev/null; then
+            echo "Issue closed: #${iid}"
+        else
+            echo "Issue #${iid} could not be closed (token refused?)."
+        fi
+    done < <(gl --get --data-urlencode "search=${prefix}" --data "state=opened&in=title&labels=Automated&per_page=100" "${API}/issues" \
+        | jq -r --arg p "${prefix}" '.[] | select(.title | startswith($p)) | .iid' || true)
+}
+
 # Signed tag on the current commit, pushed with the token. Git over HTTP wants
 # Basic authentication: a PRIVATE-TOKEN header is not accepted there.
 push_signed_tag() {
@@ -175,6 +193,7 @@ main() {
     fi
     if [[ -z "${reason}" ]]; then
         echo "Up to date, nothing to do."
+        close_resolved
         return 0
     fi
 
