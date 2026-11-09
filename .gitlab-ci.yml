@@ -3,6 +3,8 @@
 # ================================
 
 workflow:
+  auto_cancel:
+    on_new_commit: interruptible
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG
@@ -23,6 +25,10 @@ stages:
   # not merge stage lists across includes, so they must be declared here.
   - security-audit
   - version-check
+
+# A new commit cancels the running checks of the branch; the publishing jobs set interruptible: false.
+default:
+  interruptible: true
 
 variables:
   # Project metadata
@@ -101,6 +107,13 @@ tag-version:
 validate:dockerfile:
   stage: validate
   image: ${HADOLINT_IMAGE}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - Dockerfile
+    - if: $CI_PIPELINE_SOURCE != "merge_request_event"
   script:
     - hadolint Dockerfile
 
@@ -108,6 +121,13 @@ validate:dockerfile:
 validate:versions:
   stage: validate
   image: ${ALPINE_IMAGE}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - Dockerfile
+    - if: $CI_PIPELINE_SOURCE != "merge_request_event"
   script:
     - |
       version="$(sed -n 's/^ARG NODE_VERSION=//p' Dockerfile | head -n1)"
@@ -124,6 +144,19 @@ validate:versions:
 validate:markdownlint:
   stage: validate
   image: ${NODE_IMAGE}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "**/*.md"
+    - if: $CI_PIPELINE_SOURCE != "merge_request_event"
+  variables:
+    npm_config_cache: ${CI_PROJECT_DIR}/.npm
+  cache:
+    key: npm-markdownlint
+    paths:
+      - .npm/
   before_script:
     - npm install -g markdownlint-cli2
   script:
@@ -132,6 +165,13 @@ validate:markdownlint:
 validate:shellcheck:
   stage: validate
   image: ${SHELLCHECK_IMAGE}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "**/*.sh"
+    - if: $CI_PIPELINE_SOURCE != "merge_request_event"
   before_script:
     - apk add --no-cache bash findutils
   script:
@@ -151,16 +191,24 @@ validate:shellcheck:
 # ================================
 test:bats:
   stage: test
-  image: ${NODE_IMAGE}
+  image:
+    name: ${BATS_IMAGE}
+    entrypoint: [""]
   needs:
-    - validate:dockerfile
-    - validate:markdownlint
-    - validate:versions
-    - validate:shellcheck
+    - job: validate:dockerfile
+      optional: true
+    - job: validate:markdownlint
+      optional: true
+    - job: validate:versions
+      optional: true
+    - job: validate:shellcheck
+      optional: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - when: on_success
   before_script:
     - apk add --no-cache bash git coreutils findutils make jq
-    - git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
-    - /tmp/bats/install.sh /usr/local
   script:
     - bats --recursive tests/
   artifacts:
@@ -172,7 +220,53 @@ test:bats:
 # ================================
 # BUILD STAGE
 # ================================
+# Builds the stages without pushing: a change of the Dockerfile, of the scripts or of the configuration
+# is checked in the merge request, not at the tag. The registry cache is read, never written.
+.build-check-template:
+  stage: build
+  interruptible: true
+  image:
+    name: ${KANIKO_IMAGE}
+    entrypoint: [""]
+  needs:
+    - test:bats
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - Dockerfile
+        - "scripts/**/*"
+        - "config/**/*"
+  before_script:
+    - |
+      mkdir -p /kaniko/.docker
+      echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "${CI_REGISTRY_USER}" "${CI_JOB_TOKEN}" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+  script:
+    - |
+      /kaniko/executor \
+        --no-push \
+        --no-push-cache \
+        --use-new-run \
+        --cleanup \
+        --snapshot-mode=redo \
+        --compressed-caching=false \
+        --cache=true \
+        --cache-repo="${GITLAB_REGISTRY_IMAGE}" \
+        --context "${CI_PROJECT_DIR}" \
+        --dockerfile "${CI_PROJECT_DIR}/Dockerfile" \
+        --target "${TARGET}"
+
+build:check:prod:
+  extends: .build-check-template
+  variables:
+    TARGET: prod
+
+build:check:test:
+  extends: .build-check-template
+  variables:
+    TARGET: test
+
 .build-template:
+  interruptible: false
   stage: build
   image:
     name: ${KANIKO_IMAGE}
@@ -264,6 +358,7 @@ build:test:
 # SCAN STAGE
 # ================================
 .scan-template:
+  interruptible: false
   stage: scan
   image:
     name: aquasec/trivy:${TRIVY_VERSION}
@@ -347,6 +442,7 @@ scan:test:
 # PROMOTE STAGE
 # ================================
 .promote-template:
+  interruptible: false
   stage: promote
   image: ${ALPINE_IMAGE}
   before_script:
@@ -412,6 +508,7 @@ promote:test:
 # ================================
 release:create-gitlab-release:
   stage: release
+  interruptible: false
   image: ${RELEASE_CLI_IMAGE}
   needs:
     - promote:prod
