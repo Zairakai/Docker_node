@@ -186,8 +186,8 @@ version:check:
 # ================================
 # SCHEDULED FRESHNESS CHECK
 # ================================
-# Follows the upstream base image (scripts/freshness-check.sh): alert and issue
-# for every new upstream version, and with AUTO_REBUILD=true a signed patch tag
+# Follows the upstream base image (tools/zairakai/.gitlab/scripts/freshness-check.sh, from the tooling submodule): alert and issue
+# for every new upstream version, and with AUTO_REBUILD=true a signed tag (the upstream version)
 # once the cooldown is over. Uses the group variables GITLAB_TOKEN,
 # GPG_PRIVATE_KEY_B64, RELEASE_SIGNER_NAME and RELEASE_SIGNER_EMAIL, and
 # NTFY_URL for the alert.
@@ -198,6 +198,7 @@ freshness:check:
   needs:
     - audit:latest-prod
   variables:
+    GIT_SUBMODULE_STRATEGY: normal
     VERSION_ENV: "NODE_VERSION"
     PUBLISHED_IMAGE: "${DOCKERHUB_IMAGE}:latest"
     AUDIT_JSON: "trivy-audit-prod.json"
@@ -211,6 +212,6 @@ freshness:check:
       mv /tmp/crane /usr/local/bin/crane
       chmod +x /usr/local/bin/crane
   script:
-    - bash scripts/freshness-check.sh
+    - bash tools/zairakai/.gitlab/scripts/freshness-check.sh
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
