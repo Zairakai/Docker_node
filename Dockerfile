@@ -7,7 +7,8 @@ ARG IMAGE_VERSION=unknown
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
-ARG NODE_VERSION=24
+# Minor line of the base image: the patch follows upstream, the tag of the release says which one
+ARG NODE_VERSION=24.22
 
 # ================
 # STAGE 0: BASE

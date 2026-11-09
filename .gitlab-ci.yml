@@ -92,6 +92,23 @@ validate:dockerfile:
   script:
     - hadolint Dockerfile
 
+# The tool image variables of the group must name the base image of the Dockerfile.
+validate:versions:
+  stage: validate
+  image: ${ALPINE_IMAGE}
+  script:
+    - |
+      version="$(sed -n 's/^ARG NODE_VERSION=//p' Dockerfile | head -n1)"
+      if [ -z "$version" ]; then
+        echo "ERROR: no ARG NODE_VERSION in the Dockerfile."
+        exit 1
+      fi
+      if [ "${NODE_IMAGE}" != "node:${version}-alpine" ]; then
+        echo "ERROR: NODE_IMAGE is \"${NODE_IMAGE}\" (group zairakai/dockers), the Dockerfile asks for \"node:${version}-alpine\"."
+        exit 1
+      fi
+      echo "NODE_IMAGE matches the Dockerfile: ${version}"
+
 validate:markdownlint:
   stage: validate
   image: ${NODE_IMAGE}
@@ -126,6 +143,7 @@ test:bats:
   needs:
     - validate:dockerfile
     - validate:markdownlint
+    - validate:versions
     - validate:shellcheck
   before_script:
     - apk add --no-cache bash git coreutils findutils make jq
