@@ -164,7 +164,7 @@ version:check:
       }
 
       # Node.js major version — compared against the current upstream LTS line.
-      CURRENT_NODE=$(grep -oE 'ARG NODE_VERSION=[0-9]+' Dockerfile | head -n1 | cut -d= -f2)
+      CURRENT_NODE=$(grep -oE 'ARG NODE_VERSION=[0-9.]+' Dockerfile | head -n1 | cut -d= -f2 | cut -d. -f1)
       LATEST_LTS=$(curl -sf --max-time 10 "https://nodejs.org/dist/index.json" | jq -r '[.[] | select(.lts != false)][0].version' | sed 's/^v//' | cut -d. -f1)
       report_row "node (LTS)" "${CURRENT_NODE}" "${LATEST_LTS}"
 

@@ -86,7 +86,7 @@ JSON
 
 @test "upstream_from_dockerfile reads the base image of the Dockerfile" {
   use_script
-  [[ "$(upstream_from_dockerfile "${PROJECT_ROOT}/Dockerfile")" == "node:24-alpine" ]]
+  [[ "$(upstream_from_dockerfile "${PROJECT_ROOT}/Dockerfile")" == "node:24.22-alpine" ]]
 }
 
 @test "upstream_from_dockerfile resolves an ARG default" {
