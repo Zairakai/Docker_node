@@ -240,11 +240,19 @@ build:test:
 # ================================
 .scan-template:
   stage: scan
-  image: ${ALPINE_IMAGE}
+  image:
+    name: aquasec/trivy:${TRIVY_VERSION}
+    entrypoint: [""]
+  variables:
+    TRIVY_USERNAME: ${CI_REGISTRY_USER}
+    TRIVY_PASSWORD: ${CI_JOB_TOKEN}
+    TRIVY_CACHE_DIR: ${CI_PROJECT_DIR}/.trivycache
+  cache:
+    key: trivy-db
+    paths:
+      - .trivycache/
   before_script:
-    - apk add --no-cache curl bash jq docker-cli
-    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-    - echo "${CI_JOB_TOKEN}" | docker login -u "${CI_REGISTRY_USER}" --password-stdin "${CI_REGISTRY}"
+    - apk add --no-cache jq
   script:
     - |
       echo "🔒 Security Scanning (GitLab Registry)"

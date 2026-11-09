@@ -15,10 +15,17 @@ variables:
 
 .scan-latest-template:
   stage: security-audit
-  image: ${ALPINE_IMAGE}
+  image:
+    name: aquasec/trivy:${TRIVY_VERSION}
+    entrypoint: [""]
+  variables:
+    TRIVY_CACHE_DIR: ${CI_PROJECT_DIR}/.trivycache
+  cache:
+    key: trivy-db
+    paths:
+      - .trivycache/
   before_script:
-    - apk add --no-cache curl bash jq
-    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+    - apk add --no-cache bash jq
   script:
     - |
       echo "━━━━━━━━━━━━━━━━"
