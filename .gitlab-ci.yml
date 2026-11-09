@@ -33,15 +33,8 @@ variables:
   # Security scanning configuration
   SECRET_DETECTION_EXCLUDED_PATHS: "docs/,tests/"
 
-  CRANE_VERSION: "v0.22.1"
-
-  # Docker image versions
-  ALPINE_IMAGE: "alpine:3.24"
-  HADOLINT_IMAGE: "hadolint/hadolint:v2.15.1-alpine"
-  KANIKO_IMAGE: "gcr.io/kaniko-project/executor:v1.23.2-debug"
-  NODE_IMAGE: "node:24.21.0-alpine"
-  RELEASE_CLI_IMAGE: "registry.gitlab.com/gitlab-org/release-cli:v0.24.0"
-  SHELLCHECK_IMAGE: "koalaman/shellcheck-alpine:v0.11.0"
+  # The images of the tools (ALPINE_IMAGE, HADOLINT_IMAGE, KANIKO_IMAGE, SHELLCHECK_IMAGE, RELEASE_CLI_IMAGE,
+  # NODE_IMAGE, PHP_ALPINE_IMAGE) and CRANE_VERSION are variables of the zairakai/dockers group.
 
 # ================================
 # SECURITY STAGE
