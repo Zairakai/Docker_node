@@ -52,8 +52,13 @@ docker run -d --name node-app -p 3000:3000 zairakai/node:latest node server.js
 
 | Version | Production | Development | Test |
 | --- | --- | --- | --- |
-| **Major** | `zairakai/node:24-prod` | `zairakai/node:24-dev` | `zairakai/node:24-test` |
+| **Patch** | `zairakai/node:24.22.2` | `zairakai/node:24.22.2-dev` | `zairakai/node:24.22.2-test` |
+| **Minor** | `zairakai/node:24.22` | `zairakai/node:24.22-dev` | `zairakai/node:24.22-test` |
+| **Major** | `zairakai/node:24` | `zairakai/node:24-dev` | `zairakai/node:24-test` |
 | **Latest** | `zairakai/node:latest` | `zairakai/node:latest-dev` | `zairakai/node:latest-test` |
+
+The tag is the version of Node.js the image contains (`24.22.2`). A new build of the same Node.js version
+gets a revision: `24.22.2-1`, `24.22.2-2`... Its Docker Hub tags (`24.22`, `24` and `latest`) move with it.
 
 ## Usage
 
